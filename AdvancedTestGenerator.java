@@ -1,30 +1,29 @@
 import java.io.*;
-import java.nio.file.*;
 import java.util.*;
+import java.util.regex.*;
 
 public class AdvancedTestGenerator {
-    private static final String JAVA_SOURCE_DIR = "path/to/your/java/source"; // Update this path
-    private static final String TEST_OUTPUT_DIR = "path/to/generated/testng/tests"; // Update this path
-
+    
+    private static final String JAVA_SOURCE_DIR = "C:/path/to/your/java/files";  // Replace with your source directory
+    private static final String TEST_OUTPUT_DIR = "C:/generated-tests";  // Replace with your output directory
+    
     public static void main(String[] args) {
         File sourceDir = new File(JAVA_SOURCE_DIR);
         if (!sourceDir.exists() || !sourceDir.isDirectory()) {
             System.out.println("Invalid source directory: " + JAVA_SOURCE_DIR);
             return;
         }
-
-        File testDir = new File(TEST_OUTPUT_DIR);
-        if (!testDir.exists()) {
-            testDir.mkdirs();
-        }
-
+        
         processDirectory(sourceDir);
     }
-
-    private static void processDirectory(File dir) {
-        File[] files = dir.listFiles();
-        if (files == null) return;
-
+    
+    private static void processDirectory(File directory) {
+        File[] files = directory.listFiles();
+        
+        if (files == null) {
+            return; // Directory is empty or not accessible
+        }
+        
         for (File file : files) {
             if (file.isDirectory()) {
                 processDirectory(file); // Recursively process subdirectories
@@ -33,43 +32,66 @@ public class AdvancedTestGenerator {
             }
         }
     }
-
+    
     private static void processJavaFile(File javaFile) {
-        String className = javaFile.getName().replace(".java", "");
-        List<String> methods = extractPublicMethods(javaFile);
-
-        if (!methods.isEmpty()) {
-            generateTestFile(javaFile, className, methods);
-        }
-    }
-
-    private static List<String> extractPublicMethods(File javaFile) {
-        List<String> methods = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(javaFile))) {
+        System.out.println("Processing file: " + javaFile.getAbsolutePath());  // Debugging log
+        try (BufferedReader br = new BufferedReader(new FileReader(javaFile))) {
+            String className = "";
+            List<String> methods = new ArrayList<>();
             String line;
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.startsWith("public ") && line.contains("(") && line.contains(")")) {
-                    String methodName = line.split("\\s+")[2].split("\\(")[0];
-                    methods.add(methodName);
+
+            while ((line = br.readLine()) != null) {
+                System.out.println("Reading line: " + line);  // Debugging log
+
+                // Check for class declaration
+                if (line.trim().matches(".*class\\s+([a-zA-Z0-9_]+).*")) {
+                    String[] parts = line.trim().split("\\s+");
+                    if (parts.length > 1) {
+                        className = parts[1];
+                        System.out.println("Found class: " + className);
+                    } else {
+                        System.out.println("⚠️ Warning: Unexpected class declaration format in " + javaFile.getName());
+                    }
+                }
+
+                // Check for method declarations
+                if (line.trim().matches(".*\\s+([a-zA-Z0-9_]+)\\(.*\\)\\s*\\{")) {
+                    String[] parts = line.trim().split("\\s+");
+                    if (parts.length > 1) {
+                        String methodName = parts[1];
+                        methods.add(methodName);
+                        System.out.println("Found method: " + methodName);
+                    } else {
+                        System.out.println("⚠️ Warning: Unexpected method declaration format in " + javaFile.getName());
+                    }
                 }
             }
-        } catch (IOException e) {
-            System.out.println("Error reading file: " + javaFile.getName());
-        }
-        return methods;
-    }
 
+            if (!className.isEmpty()) {
+                generateTestFile(javaFile, className, methods);
+            } else {
+                System.out.println("❌ No class found in: " + javaFile.getName());
+            }
+        } catch (Exception e) {
+            System.out.println("❌ Error processing file: " + javaFile.getAbsolutePath());
+            e.printStackTrace();  // Print full stack trace for debugging
+        }
+    }
+    
     private static void generateTestFile(File javaFile, String className, List<String> methods) {
         String packagePath = javaFile.getParent().replace(JAVA_SOURCE_DIR, "").replace(File.separator, ".");
         packagePath = packagePath.startsWith(".") ? packagePath.substring(1) : packagePath;
         String testClassName = className + "Test";
         String testFilePath = TEST_OUTPUT_DIR + File.separator + packagePath.replace(".", File.separator) + File.separator + testClassName + ".java";
-
+        
         try {
-            new File(testFilePath).getParentFile().mkdirs(); // Create directories if needed
-            PrintWriter writer = new PrintWriter(new FileWriter(testFilePath));
-
+            File testFile = new File(testFilePath);
+            testFile.getParentFile().mkdirs();  // Ensure the parent directory exists
+            
+            System.out.println("Attempting to create test file: " + testFilePath);  // Debugging log
+            
+            PrintWriter writer = new PrintWriter(new FileWriter(testFile));
+            
             // Package declaration
             if (!packagePath.isEmpty()) {
                 writer.println("package " + packagePath + ";");
@@ -95,13 +117,14 @@ public class AdvancedTestGenerator {
 
             writer.println("}");
             writer.close();
-            System.out.println("Generated test file: " + testFilePath);
+            System.out.println("✅ Test file created successfully: " + testFilePath);
         } catch (IOException e) {
-            System.out.println("Error writing test file: " + testFilePath);
+            System.out.println("❌ Error writing test file: " + testFilePath);
+            e.printStackTrace();  // Print full stack trace for debugging
         }
     }
 
-    private static String capitalize(String str) {
-        return str.substring(0, 1).toUpperCase() + str.substring(1);
+    private static String capitalize(String methodName) {
+        return methodName.substring(0, 1).toUpperCase() + methodName.substring(1);
     }
 }
