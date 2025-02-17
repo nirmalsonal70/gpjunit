@@ -1,112 +1,104 @@
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
-import java.util.regex.*;
-import java.util.stream.*;
 
 public class AdvancedTestGenerator {
+    private static final String JAVA_SOURCE_DIR = "path/to/your/java/source"; // Update this path
+    private static final String TEST_OUTPUT_DIR = "path/to/generated/testng/tests"; // Update this path
 
-    private static final String JAVA_SOURCE_DIR = "path/to/your/java/source"; // Change this
-    private static final String TEST_OUTPUT_DIR = "path/to/generated/testng/tests"; // Change this
-
-    private static final Pattern CLASS_PATTERN = Pattern.compile("class\\s+(\\w+)\\s*(extends\\s+(\\w+))?");
-    private static final Pattern ABSTRACT_PATTERN = Pattern.compile("abstract\\s+class\\s+(\\w+)");
-    private static final Pattern METHOD_PATTERN = Pattern.compile("public\\s+\\w+\\s+(\\w+)\\(([^)]*)\\)");
-
-    public static void main(String[] args) throws IOException {
-        Files.createDirectories(Paths.get(TEST_OUTPUT_DIR));
-
-        List<File> javaFiles = getJavaFiles(new File(JAVA_SOURCE_DIR));
-        Map<String, String> classInheritanceMap = new HashMap<>();
-
-        // First pass: collect class names and their parent classes
-        for (File javaFile : javaFiles) {
-            analyzeClassHierarchy(javaFile, classInheritanceMap);
+    public static void main(String[] args) {
+        File sourceDir = new File(JAVA_SOURCE_DIR);
+        if (!sourceDir.exists() || !sourceDir.isDirectory()) {
+            System.out.println("Invalid source directory: " + JAVA_SOURCE_DIR);
+            return;
         }
 
-        // Second pass: generate test cases
-        for (File javaFile : javaFiles) {
-            generateTestFile(javaFile, classInheritanceMap);
+        File testDir = new File(TEST_OUTPUT_DIR);
+        if (!testDir.exists()) {
+            testDir.mkdirs();
         }
 
-        System.out.println("Test generation completed!");
+        processDirectory(sourceDir);
     }
 
-    private static List<File> getJavaFiles(File directory) {
-        return Arrays.stream(Objects.requireNonNull(directory.listFiles()))
-                .flatMap(file -> file.isDirectory() ? getJavaFiles(file).stream() : Stream.of(file))
-                .filter(file -> file.getName().endsWith(".java"))
-                .collect(Collectors.toList());
-    }
+    private static void processDirectory(File dir) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
 
-    private static void analyzeClassHierarchy(File javaFile, Map<String, String> classInheritanceMap) throws IOException {
-        String content = Files.readString(javaFile.toPath());
-
-        Matcher classMatcher = CLASS_PATTERN.matcher(content);
-        if (classMatcher.find()) {
-            String className = classMatcher.group(1);
-            String parentClass = classMatcher.group(3);
-            if (parentClass != null) {
-                classInheritanceMap.put(className, parentClass);
+        for (File file : files) {
+            if (file.isDirectory()) {
+                processDirectory(file); // Recursively process subdirectories
+            } else if (file.getName().endsWith(".java")) {
+                processJavaFile(file);
             }
         }
     }
 
-    private static void generateTestFile(File javaFile, Map<String, String> classInheritanceMap) throws IOException {
-        String content = Files.readString(javaFile.toPath());
-
-        Matcher classMatcher = CLASS_PATTERN.matcher(content);
-        Matcher abstractMatcher = ABSTRACT_PATTERN.matcher(content);
-
-        if (!classMatcher.find()) return;
-
-        String className = classMatcher.group(1);
-        boolean isAbstract = abstractMatcher.find();
-
-        Matcher methodMatcher = METHOD_PATTERN.matcher(content);
-        List<String> methods = new ArrayList<>();
-
-        while (methodMatcher.find()) {
-            methods.add(methodMatcher.group(1));
-        }
+    private static void processJavaFile(File javaFile) {
+        String className = javaFile.getName().replace(".java", "");
+        List<String> methods = extractPublicMethods(javaFile);
 
         if (!methods.isEmpty()) {
-            writeTestFile(className, methods, classInheritanceMap, isAbstract);
+            generateTestFile(javaFile, className, methods);
         }
     }
 
-    private static void writeTestFile(String className, List<String> methods, Map<String, String> classInheritanceMap, boolean isAbstract) throws IOException {
+    private static List<String> extractPublicMethods(File javaFile) {
+        List<String> methods = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(javaFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith("public ") && line.contains("(") && line.contains(")")) {
+                    String methodName = line.split("\\s+")[2].split("\\(")[0];
+                    methods.add(methodName);
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Error reading file: " + javaFile.getName());
+        }
+        return methods;
+    }
+
+    private static void generateTestFile(File javaFile, String className, List<String> methods) {
+        String packagePath = javaFile.getParent().replace(JAVA_SOURCE_DIR, "").replace(File.separator, ".");
+        packagePath = packagePath.startsWith(".") ? packagePath.substring(1) : packagePath;
         String testClassName = className + "Test";
-        String testFilePath = TEST_OUTPUT_DIR + "/" + testClassName + ".java";
+        String testFilePath = TEST_OUTPUT_DIR + File.separator + packagePath.replace(".", File.separator) + File.separator + testClassName + ".java";
 
-        StringBuilder testContent = new StringBuilder();
-        testContent.append("package com.example;\n\n")
-                   .append("import static org.testng.Assert.*;\n")
-                   .append("import org.testng.annotations.Test;\n\n")
-                   .append("public class ").append(testClassName).append(" {\n\n");
+        try {
+            new File(testFilePath).getParentFile().mkdirs(); // Create directories if needed
+            PrintWriter writer = new PrintWriter(new FileWriter(testFilePath));
 
-        String parentClass = classInheritanceMap.get(className);
-        String instanceType = (isAbstract ? "// Cannot instantiate abstract class" : className + " obj = new " + className + "();");
-
-        for (String method : methods) {
-            testContent.append("    @Test\n")
-                       .append("    public void test").append(capitalize(method)).append("() {\n")
-                       .append("        // TODO: Add test logic for ").append(method).append("\n")
-                       .append("        ").append(instanceType).append("\n");
-
-            if (parentClass != null) {
-                testContent.append("        // Also testing inherited behavior from ").append(parentClass).append("\n");
+            // Package declaration
+            if (!packagePath.isEmpty()) {
+                writer.println("package " + packagePath + ";");
+                writer.println();
             }
 
-            testContent.append("        // obj.").append(method).append("();\n")
-                       .append("        assertTrue(true); // Replace with actual assertion\n")
-                       .append("    }\n\n");
+            // Imports
+            writer.println("import org.testng.annotations.Test;");
+            writer.println("import static org.testng.Assert.*;");
+            writer.println();
+            writer.println("public class " + testClassName + " {");
+            writer.println();
+
+            // Generate test methods
+            for (String method : methods) {
+                writer.println("    @Test");
+                writer.println("    public void test" + capitalize(method) + "() {");
+                writer.println("        // TODO: Implement test for " + method);
+                writer.println("        fail(\"Not implemented yet\");");
+                writer.println("    }");
+                writer.println();
+            }
+
+            writer.println("}");
+            writer.close();
+            System.out.println("Generated test file: " + testFilePath);
+        } catch (IOException e) {
+            System.out.println("Error writing test file: " + testFilePath);
         }
-
-        testContent.append("}\n");
-
-        Files.writeString(Paths.get(testFilePath), testContent.toString());
-        System.out.println("Generated TestNG file: " + testFilePath);
     }
 
     private static String capitalize(String str) {
