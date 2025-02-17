@@ -4,8 +4,8 @@ import java.util.regex.*;
 
 public class AdvancedTestGenerator {
     
-    private static final String JAVA_SOURCE_DIR = "C:/path/to/your/java/files";  // Replace with your source directory
-    private static final String TEST_OUTPUT_DIR = "C:/generated-tests";  // Replace with your output directory
+	private static final String JAVA_SOURCE_DIR = "C:/Users/8207259/WorkSpace_Junit/19849-gpbs-web/efbs2-parent/efbs2/src/main/java/com/scb/efbs2"; // Change this
+    private static final String TEST_OUTPUT_DIR = "C:/Users/8207259/WorkSpace_Junit/19849-gpbs-web/efbs2-parent/efbs2/src/main/java/com/scb/efbs2/output"; // Change this
     
     public static void main(String[] args) {
         File sourceDir = new File(JAVA_SOURCE_DIR);
@@ -30,6 +30,7 @@ public class AdvancedTestGenerator {
             } else if (file.getName().endsWith(".java")) {
                 processJavaFile(file);
             }
+            break;
         }
     }
     
@@ -41,14 +42,14 @@ public class AdvancedTestGenerator {
             String line;
 
             while ((line = br.readLine()) != null) {
-                System.out.println("Reading line: " + line);  // Debugging log
+//                System.out.println("Reading line: " + line);  // Debugging log
 
                 // Check for class declaration
                 if (line.trim().matches(".*class\\s+([a-zA-Z0-9_]+).*")) {
                     String[] parts = line.trim().split("\\s+");
                     if (parts.length > 1) {
                         className = parts[1];
-                        System.out.println("Found class: " + className);
+//                        System.out.println("Found class: " + className);
                     } else {
                         System.out.println("⚠️ Warning: Unexpected class declaration format in " + javaFile.getName());
                     }
@@ -60,7 +61,7 @@ public class AdvancedTestGenerator {
                     if (parts.length > 1) {
                         String methodName = parts[1];
                         methods.add(methodName);
-                        System.out.println("Found method: " + methodName);
+//                        System.out.println("Found method: " + methodName);
                     } else {
                         System.out.println("⚠️ Warning: Unexpected method declaration format in " + javaFile.getName());
                     }
@@ -82,8 +83,7 @@ public class AdvancedTestGenerator {
         String packagePath = javaFile.getParent().replace(JAVA_SOURCE_DIR, "").replace(File.separator, ".");
         packagePath = packagePath.startsWith(".") ? packagePath.substring(1) : packagePath;
         String testClassName = className + "Test";
-        String testFilePath = TEST_OUTPUT_DIR + File.separator + packagePath.replace(".", File.separator) + File.separator + testClassName + ".java";
-        
+        String testFilePath = TEST_OUTPUT_DIR + File.separator + testClassName + ".java";
         try {
             File testFile = new File(testFilePath);
             testFile.getParentFile().mkdirs();  // Ensure the parent directory exists
